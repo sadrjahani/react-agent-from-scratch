@@ -1,0 +1,21 @@
+[project]
+name = "react_agent"
+version = "0.1.0"
+description = "ReAct agent built from scratch in Python: tool use, output parser and agent loop without frameworks"
+readme = "README.md"
+authors = [
+    { name = "Sara Sadr jahani (Sadrejahani)", email = "81716125+sadrjahani@users.noreply.github.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "anthropic>=2.0.0",
+    "openai>=3.36.0",
+    "python-dotenv>=1.2.4",
+]
+
+[project.scripts]
+react_agent = "react_agent:main"
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
