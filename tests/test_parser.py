@@ -64,3 +64,33 @@ def test_think_block_is_ignored() -> None:
 def test_unclosed_think_block_hides_everything_after_it() -> None:
     text = "<think>Action: calculator\nAction Input: 1+1"
     assert parse(text)["type"] == "error"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Action:\nAction Input: 2+2",
+        "Action:   \nAction Input: 2+2",
+    ],
+)
+def test_action_without_tool_name_is_an_error(text: str) -> None:
+    result = parse(text)
+
+    assert result["type"] == "error"
+    assert "tool" in result["message"].lower()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Action: calculator\nAction Input:",
+        "Action: calculator\nAction Input:   ",
+    ],
+)
+def test_action_with_empty_input_is_an_error(text: str) -> None:
+    result = parse(text)
+
+    assert result["type"] == "error"
+    assert "Action Input" in result["message"]
+    assert "empty" in result["message"].lower()
+    

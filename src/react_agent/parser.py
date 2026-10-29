@@ -30,7 +30,10 @@ Parsed = ActionResult | FinalResult | ErrorResult
 # Reasoning models (for example qwen3) may print their thoughts first. A stray
 # "Action:" inside them must not count; an unclosed block is dropped to the end.
 _THINK_RE = re.compile(r"<think>.*?(?:</think>|\Z)", re.DOTALL)
-_ACTION_RE = re.compile(r"Action:[ \t]*([^\n]+)\n+[ \t]*Action Input:[ \t]*([^\n]+)")
+_ACTION_RE = re.compile(
+    r"(?m)^Action:[ \t]*(?P<tool>[^\r\n]*)\r?\n+"
+    r"[ \t]*Action Input:[ \t]*(?P<input>[^\r\n]*)"
+)
 _FINAL_RE = re.compile(r"Final Answer:\s*(.+)", re.DOTALL)
 
 
@@ -55,10 +58,25 @@ def parse(text: str) -> Parsed:
     # An Action wins over a Final Answer after it: the model may invent the
     # answer before the tool has run.
     if action and (not final or action.start() < final.start()):
+        tool = action.group("tool").strip()
+        tool_input = _strip_quotes(action.group("input"))
+
+        if not tool:
+            return {
+                "type": "error",
+                "message": "Tool name is empty. Provide a tool name after 'Action:'.",
+            }
+
+        if not tool_input:
+            return {
+                "type": "error",
+                "message": "Action Input is empty. Provide an input for the tool.",
+            }
+
         return {
             "type": "action",
-            "tool": action.group(1).strip(),
-            "input": _strip_quotes(action.group(2)),
+            "tool": tool,
+            "input": tool_input,
         }
 
     if final and final.group(1).strip():
