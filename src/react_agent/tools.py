@@ -1,16 +1,9 @@
-"""Tools the agent can call.
+"""Tools the agent can call: a safe calculator, a fake search and a sandboxed file reader.
 
 Every tool is a plain function ``str -> str`` wrapped in a :class:`Tool`.
-The model sends the input as text (``Action Input:``) and receives the result
-as text (``Observation:``), so strings in and strings out keep the tools simple
-and easy to test without any LLM.
-
-Contract with the rest of the project:
-    - ``prompt.py`` reads ``Tool.name`` and ``Tool.description``.
-    - ``loop.py`` reads ``Tool.name`` and calls ``Tool.func``.
-    - Expected problems the model can fix (missing file, outside the sandbox)
-      are *returned* as ``"Error: ..."`` text. Unexpected problems are raised;
-      the loop turns them into an Observation.
+Problems the model can fix (missing file, outside the sandbox) are returned as
+``"Error: ..."`` text. Unexpected ones are raised; the loop turns them into an
+Observation.
 """
 
 import ast
@@ -21,12 +14,12 @@ from pathlib import Path
 
 __all__ = ["TOOLS", "Tool", "calculator", "file_lookup", "search"]
 
-# --- Limits (named so they are easy to find and change) ---------------------
-MAX_EXPRESSION_LENGTH = 200  # blocks huge or deeply nested input (RecursionError)
-MAX_EXPONENT = 100  # blocks expressions like 9**9**9 that freeze the program
-MAX_FILE_CHARS = 2000  # keeps one Observation from filling the model's context
+# Limits that stop huge input from freezing the program or flooding the context.
+MAX_EXPRESSION_LENGTH = 200
+MAX_EXPONENT = 100
+MAX_FILE_CHARS = 2000
 
-# Sandbox folder, relative to the directory the program is started from.
+# Relative to the directory the program is started from.
 DATA_DIR = Path("data")
 
 Number = int | float
@@ -36,12 +29,8 @@ Number = int | float
 class Tool:
     """A tool the agent can call.
 
-    Attributes:
-        name: Exact name the model must write after ``Action:``.
-        description: What the tool does and an example input. This text is
-            all the model knows about the tool, so write it carefully.
-        func: Function that takes the ``Action Input`` text and returns the
-            result text.
+    ``description`` is all the model knows about the tool, so include an
+    example input.
     """
 
     name: str
@@ -49,9 +38,8 @@ class Tool:
     func: Callable[[str], str]
 
 
-# --- calculator -------------------------------------------------------------
-# Why not eval()? eval("__import__('os')...") runs arbitrary code. Instead we
-# parse the text into a syntax tree and evaluate only whitelisted node types.
+# No eval(): it would run any code the model writes. Only whitelisted node
+# types are evaluated.
 _BINARY_OPS: dict[type[ast.operator], Callable[[Number, Number], Number]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
@@ -66,18 +54,13 @@ _UNARY_OPS: dict[type[ast.unaryop], Callable[[Number], Number]] = {
 
 
 def _eval_node(node: ast.AST) -> Number:
-    """Evaluate one syntax-tree node, allowing only numbers and + - * / **.
-
-    Raises:
-        ValueError: If the node type is not whitelisted or the exponent is
-            too large.
-    """
-    # type(...) in (int, float) instead of isinstance: bool is a subclass of
-    # int, and we do not want True/False (or strings) to count as numbers.
+    """Evaluate a syntax-tree node; only numbers and whitelisted operators pass."""
+    # type() instead of isinstance: bool is a subclass of int, and True must not
+    # count as a number.
     if isinstance(node, ast.Constant) and type(node.value) in (int, float):
         return node.value
     if isinstance(node, ast.BinOp) and type(node.op) in _BINARY_OPS:
-        left = _eval_node(node.left)  # recursion handles 2+3*4 correctly
+        left = _eval_node(node.left)
         right = _eval_node(node.right)
         if isinstance(node.op, ast.Pow) and abs(right) > MAX_EXPONENT:
             raise ValueError("exponent too large")
@@ -90,14 +73,8 @@ def _eval_node(node: ast.AST) -> Number:
 def calculator(expression: str) -> str:
     """Safely evaluate an arithmetic expression such as ``2+3*4``.
 
-    Args:
-        expression: Text with numbers, ``+ - * / **`` and parentheses.
-
-    Returns:
-        The result as text, e.g. ``"14"``.
-
     Raises:
-        ValueError: Unsupported or too long expression, or exponent too large.
+        ValueError: Unsupported, too long, or too large an exponent.
         SyntaxError: The text is not a valid expression.
         ZeroDivisionError: Division by zero.
     """
@@ -108,10 +85,7 @@ def calculator(expression: str) -> str:
     return str(_eval_node(tree.body))
 
 
-# --- search (fake, offline) ---------------------------------------------------
-# A tiny fixed knowledge base so the project needs no API key and tests are
-# deterministic. Replace with a real search later without changing the tool
-# interface.
+# Fixed facts keep the project offline and the tests deterministic.
 _FACTS = {
     "capital of france": "Paris is the capital of France.",
     "population of france": "France has a population of about 68 million people.",
@@ -121,14 +95,7 @@ _FACTS = {
 
 
 def search(query: str) -> str:
-    """Look up a short fact in the built-in fake knowledge base.
-
-    A fact matches when its key appears anywhere in the query (ignoring case),
-    so "What is the height of Eiffel Tower?" finds "height of eiffel tower".
-
-    Returns:
-        The fact, or ``"No results found."``.
-    """
+    """Return the fact whose key appears in the query (any case), or "No results found."."""
     q = query.lower()
     for key, answer in _FACTS.items():
         if key in q:
@@ -136,17 +103,12 @@ def search(query: str) -> str:
     return "No results found."
 
 
-# --- file_lookup (sandboxed) ---------------------------------------------------
 def file_lookup(filename: str) -> str:
-    """Read a UTF-8 text file from the sandbox folder ``DATA_DIR``.
+    """Read a UTF-8 text file inside ``DATA_DIR``.
 
-    Security: the path is resolved first (removing ``..`` and symlinks) and
-    must stay inside ``DATA_DIR``; otherwise the model could read any file on
-    the machine (path traversal).
-
-    Returns:
-        The first ``MAX_FILE_CHARS`` characters of the file, or an
-        ``"Error: ..."`` message the model can act on.
+    The path is resolved first, so ``..`` and absolute paths cannot escape the
+    folder. Returns the first ``MAX_FILE_CHARS`` characters or an ``Error: ...``
+    message.
     """
     base = DATA_DIR.resolve()
     path = (base / filename.strip()).resolve()
@@ -161,9 +123,7 @@ def file_lookup(filename: str) -> str:
     return text[:MAX_FILE_CHARS]
 
 
-# --- registry ---------------------------------------------------------------------
-# To add a tool: write a ``str -> str`` function and add one Tool(...) here.
-# prompt.py and loop.py need no changes.
+# To add a tool, write a ``str -> str`` function and register it here.
 TOOLS: list[Tool] = [
     Tool(
         "calculator",

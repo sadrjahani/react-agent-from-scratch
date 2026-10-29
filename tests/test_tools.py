@@ -1,7 +1,4 @@
-"""Tests for react_agent.tools: calculator safety, fake search, sandboxed files.
-
-No LLM or network is involved; every test is deterministic.
-"""
+"""Tests for react_agent.tools. No LLM or network is involved."""
 
 from pathlib import Path
 
@@ -13,24 +10,19 @@ from react_agent.tools import TOOLS, calculator, file_lookup, search
 
 @pytest.fixture
 def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point the file sandbox at a temporary folder for one test.
-
-    monkeypatch restores the real DATA_DIR afterwards, so tests never touch
-    the project's real data/ folder.
-    """
+    """Point the file sandbox at a temporary folder (restored after the test)."""
     monkeypatch.setattr(tools, "DATA_DIR", tmp_path)
     return tmp_path
 
 
-# --- calculator ----------------------------------------------------------------
 @pytest.mark.parametrize(
     ("expression", "expected"),
     [
-        ("2+3*4", "14"),  # operator precedence
-        ("(1+2)*3", "9"),  # parentheses
-        ("7/2", "3.5"),  # true division
-        ("-(2+3)*2", "-10"),  # unary minus
-        ("2**10", "1024"),  # power within the limit
+        ("2+3*4", "14"),
+        ("(1+2)*3", "9"),
+        ("7/2", "3.5"),
+        ("-(2+3)*2", "-10"),
+        ("2**10", "1024"),
     ],
 )
 def test_calculator_valid_expressions(expression: str, expected: str) -> None:
@@ -66,7 +58,6 @@ def test_calculator_invalid_syntax_is_raised() -> None:
         calculator("2+")
 
 
-# --- search --------------------------------------------------------------------
 def test_search_finds_fact_inside_a_longer_query() -> None:
     assert "330" in search("What is the height of Eiffel Tower?")
 
@@ -75,7 +66,6 @@ def test_search_returns_message_when_nothing_matches() -> None:
     assert search("something unknown") == "No results found."
 
 
-# --- file_lookup ---------------------------------------------------------------
 def test_file_lookup_reads_file(data_dir: Path) -> None:
     (data_dir / "a.txt").write_text("hello", encoding="utf-8")
     assert file_lookup("a.txt") == "hello"
@@ -88,7 +78,6 @@ def test_file_lookup_truncates_long_files(data_dir: Path) -> None:
 
 @pytest.mark.parametrize("filename", ["../secret.txt", "../../etc/passwd"])
 def test_file_lookup_blocks_path_traversal(data_dir: Path, filename: str) -> None:
-    """'..' must not let the model escape the sandbox folder."""
     assert "outside" in file_lookup(filename)
 
 
@@ -108,7 +97,6 @@ def test_file_lookup_reports_non_utf8_file(data_dir: Path) -> None:
     assert "not a UTF-8" in file_lookup("bin.dat")
 
 
-# --- registry (contract with prompt.py and loop.py) -----------------------------
 def test_registry_has_expected_unique_tool_names() -> None:
     names = [t.name for t in TOOLS]
     assert sorted(names) == ["calculator", "file_lookup", "search"]
