@@ -15,7 +15,9 @@ from .config import (
     Settings,
 )
 
-__all__ = ["Message", "Settings", "chat"]
+# DEFAULT_OLLAMA_URL is re-exported on purpose: callers (and tests) read the
+# constant from this module, while config.py stays its single source of truth.
+__all__ = ["DEFAULT_OLLAMA_URL", "Message", "Settings", "chat"]
 
 
 class Message(TypedDict):
