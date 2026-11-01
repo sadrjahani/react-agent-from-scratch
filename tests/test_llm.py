@@ -39,10 +39,13 @@ def fake_openai(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     return record
 
 
-def test_missing_model_is_rejected() -> None:
+def test_missing_model_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_MODEL", "")
+
     with pytest.raises(ValueError, match="LLM_MODEL"):
         chat(MESSAGES)
-
 
 def test_empty_messages_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODEL", "m")
@@ -81,3 +84,17 @@ def test_none_content_becomes_empty_string(monkeypatch: pytest.MonkeyPatch, fake
     monkeypatch.setenv("LLM_MODEL", "m")
     fake_openai.reply = None
     assert chat(MESSAGES) == ""
+
+
+def test_openai_provider_uses_sdk_environment_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_openai: SimpleNamespace,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+
+    assert chat(MESSAGES) == "hello"
+
+    assert fake_openai.init["base_url"] is None
+    assert fake_openai.init["api_key"] is None
+    assert fake_openai.init["timeout"] == llm.REQUEST_TIMEOUT_SECONDS
