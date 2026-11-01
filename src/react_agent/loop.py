@@ -78,7 +78,8 @@ def run_agent(question, tools, llm=chat, max_iters=6):
                 observation = str(
                     tool_map[parsed["tool"]].func(parsed["input"])
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - deliberate: any tool
+                # failure must become an Observation, never crash the loop.
                 observation = f"Error: tool failed: {e}"
 
         trace[-1]["observation"] = observation
