@@ -6,7 +6,6 @@ from typing import Self
 
 from dotenv import load_dotenv
 
-
 DEFAULT_PROVIDER = "ollama"
 SUPPORTED_PROVIDERS = ("ollama", "openai")
 DEFAULT_OLLAMA_URL = "http://localhost:11434/v1"
