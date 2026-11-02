@@ -1,179 +1,241 @@
-# ReAct Agent From Scratch
+# React Agent From Scratch
 
-A ReAct (Reasoning + Acting) agent built in plain Python, without agent frameworks. The model reasons in text, picks a tool, receives the tool result as an observation, and repeats until it can give a final answer.
+A small educational implementation of a **ReAct (Reasoning + Acting) agent** in Python.
 
-**Status:** work in progress. The model wrapper, the tools and the system prompt are done and tested. The output parser and the agent loop come next.
+The project makes the core agent workflow explicit: a language model decides whether to answer or use a tool, the application parses that decision, executes the requested tool, returns the result as an observation, and repeats until a final answer is produced or the iteration limit is reached.
+
+> **Status:** educational prototype. The latest development results reported for this project were **79 passing tests** and a clean Ruff check. Re-run the checks in your own checkout to verify its current state.
+
+## Contents
+
+- [Overview](#overview)
+- [How ReAct works](#how-react-works)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [CLI usage](#cli-usage)
+- [Python usage](#python-usage)
+- [Project structure](#project-structure)
+- [Design decisions](#design-decisions)
+- [Testing](#testing)
+- [Limitations](#limitations)
+- [Possible next steps](#possible-next-steps)
+
+## Overview
+
+A conventional program follows a predefined sequence of operations. A ReAct agent adds a model-driven decision step: based on the user's question and the observations collected so far, the model can choose an available action or return a final answer.
+
+This repository is intentionally compact. Its purpose is to make the main components understandable and testable:
+
+- model interaction behind a provider-independent wrapper;
+- prompt construction and the ReAct interaction format;
+- parsing model output into an action or final answer;
+- tool selection and execution;
+- returning tool observations to the model;
+- handling tool failures and bounding the loop.
+
+The goal is to understand agent mechanics, not to provide a production-ready autonomous system.
+
+## How ReAct works
+
+1. Receive the user's question.
+2. Ask the language model what to do next.
+3. Parse the model's response.
+4. If it requests a tool, execute that action.
+5. Add the tool result as an **Observation**.
+6. Ask the model to continue with the new observation.
+7. Stop when the model returns a final answer or the iteration limit is reached.
+
+For example, for `What is 25 * 4?`, the model can request the calculator tool. The tool returns `100`, and the model uses that observation to produce a final answer.
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    Q["Question"] --> L["loop.py<br/>agent loop"]
-    P["prompt.py<br/>system prompt"] --> L
-    L --> M["llm.py<br/>chat()"]
-    M --> X["parser.py<br/>text to action / final / error"]
-    X -->|Final Answer| F["Answer"]
-    X -->|Action| T["tools.py<br/>run the tool"]
-    X -->|malformed output| E["Error observation"]
-    T -->|Observation| L
-    E -->|Observation| L
-
-    classDef done fill:#d4edda,stroke:#2e7d32,color:#000
-    classDef todo fill:#f0f0f0,stroke:#888,stroke-dasharray: 4 3,color:#000
-    class P,M,T done
-    class L,X,E,Q,F todo
+    U[User question] --> L[Agent loop]
+    L --> P[Prompt construction]
+    P --> M[LLM wrapper]
+    M --> R[Response parser]
+    R --> D{Parsed response}
+    D -->|Action| T[Tool execution]
+    T --> O[Observation]
+    O --> L
+    D -->|Final answer| F[Return answer]
+    D -->|Invalid output| E[Error observation]
+    E --> L
 ```
 
-Green boxes are implemented. Dashed grey boxes are planned.
+The loop coordinates the process without needing to know provider-specific details or the internal implementation of each tool.
 
-## What is ReAct?
+## Features
 
-ReAct ([Yao et al., 2022](https://arxiv.org/abs/2210.03629)) makes a language model alternate between thinking and acting. The model is asked to write this format:
+- **ReAct loop** that alternates between model decisions and tool observations.
+- **Provider integration** for Ollama and Groq through the project's LLM wrapper.
+- **Response parser** for actions and final answers.
+- **Built-in tools:**
+  - **Calculator:** evaluates supported arithmetic expressions with restrictions rather than unrestricted Python execution.
+  - **Search:** searches a small, predefined demonstration dataset; it is not general-purpose internet search.
+  - **File lookup:** looks up files within the project's data area.
+- **Iteration limit** through `max_iters`.
+- **CLI** runnable as a Python package.
+- **Automated tests** and Ruff linting.
 
+## Getting started
+
+The project uses Python and `uv` for environment and dependency management. Check `pyproject.toml` for the authoritative Python version and dependencies.
+
+Clone the repository and enter its directory:
+
+```powershell
+git clone <repository-url>
+cd react-agent-from-scratch
 ```
-Thought: I need the height of the Eiffel Tower first.
-Action: search
-Action Input: height of eiffel tower
-Observation: The Eiffel Tower is about 330 meters tall.   <- written by the program, not the model
-Thought: Now I can double it.
-Action: calculator
-Action Input: 330*2
-Observation: 660
-Thought: I now know the final answer
-Final Answer: 660 meters
+
+Install dependencies:
+
+```powershell
+uv sync
 ```
 
-The program reads `Action` and `Action Input`, runs the tool, appends the `Observation`, and calls the model again.
+Create a `.env` file in the project root and configure the model provider as described in the next section. Then run:
 
-## What works today
+```powershell
+uv run python -m react_agent "What is 25 * 4?"
+```
 
-| Module | Job |
-|---|---|
-| `llm.py` | One `chat()` function that talks to a model. The model name comes from `.env`, so nothing is hard-coded. |
-| `tools.py` | Three tools: a safe calculator, a fake offline search, and a sandboxed file reader. |
-| `prompt.py` | Builds the system prompt (format + rules + tool list) from the list of tools. |
+The repository URL is intentionally a placeholder here; use the actual remote URL configured for your repository.
+
+## Configuration
+
+Configuration is handled by the project's settings/configuration module and environment variables. Do not commit API keys or other secrets.
+
+The project has integrations for:
+
+- **Ollama**, for a locally served model.
+- **Groq**, for a hosted model through the provider integration.
+
+Use the current `src/react_agent/config.py` and any `.env.example` in your checkout as the source of truth for exact variable names, defaults, model identifiers, and provider-specific options. Those details should not be guessed in documentation because they can change between revisions.
+
+For Ollama, make sure the Ollama service is running and the configured model is available locally. For Groq, provide a valid API key and a model supported by the account/API.
+
+## CLI usage
+
+Run a question:
+
+```powershell
+uv run python -m react_agent "What is 25 * 4?"
+```
+
+Set the maximum number of iterations:
+
+```powershell
+uv run python -m react_agent "What is 25 * 4?" --max-iters 8
+```
+
+`--max-iters` is a safety bound on the number of agent iterations/model decisions. It is not a performance option; lowering it does not necessarily make a run faster.
+
+The CLI prints the result after the agent run returns. It should not be described as live token-by-token streaming.
+
+**Command note:** `python -m react_agent` was verified in the reported project state. A shorter command such as `uv run react_agent` is only available if a matching console-script entry is defined in `pyproject.toml`.
+
+## Python usage
+
+The agent can also be called from Python. The following is an illustrative usage pattern; confirm the current public function signature and return type in `src/react_agent/loop.py` before relying on it:
 
 ```python
-from react_agent.tools import TOOLS, calculator, file_lookup
-from react_agent.prompt import build_system_prompt
+from react_agent.loop import run_agent
 
-calculator("2+3*4")                 # '14'
-file_lookup("notes.txt")            # reads data/notes.txt
-print(build_system_prompt(TOOLS))   # the system prompt the model receives
+answer = run_agent("What is 25 * 4?")
+print(answer)
 ```
-
-## Quick start
-
-Requirements: Python 3.13+, [uv](https://docs.astral.sh/uv/) and [Ollama](https://ollama.com).
-
-```bash
-git clone https://github.com/sadrjahani/react-agent-from-scratch.git
-cd react-agent-from-scratch
-
-uv sync                      # create the environment from uv.lock
-ollama pull qwen3:8b         # download a local model (about 5 GB)
-cp .env.example .env         # PowerShell: Copy-Item .env.example .env
-```
-
-Edit `.env`:
-
-```
-LLM_PROVIDER=ollama
-LLM_MODEL=qwen3:8b
-```
-
-Check the connection and run the tests:
-
-```bash
-uv run python -m react_agent.llm     # prints a short greeting from the model
-uv run pytest -q                     # no model or network needed
-uv run ruff check .
-```
-
-To try another model for a single run (PowerShell): `$env:LLM_MODEL="llama3.2"`.
 
 ## Project structure
 
-```
-src/react_agent/
-    llm.py        model wrapper
-    tools.py      calculator, search, file_lookup + Tool registry
-    prompt.py     system prompt builder
-tests/            unit tests (fake clients, no network)
-data/notes.txt    sample file for the file tool (the tool's sandbox folder)
-.env.example      settings template (no secrets)
+High-level guide to the modules discussed during development. The exact tree may contain additional files:
+
+```text
+react-agent-from-scratch/
+├── src/
+│   └── react_agent/
+│       ├── __main__.py     # python -m react_agent entry point
+│       ├── cli.py          # command-line interface
+│       ├── config.py       # settings and provider configuration
+│       ├── llm.py          # model wrapper
+│       ├── loop.py         # ReAct orchestration
+│       ├── parser.py       # action/final-answer parsing
+│       ├── prompt.py       # prompt construction
+│       └── tools/          # tool implementations and registry
+└── tests/
+    └── test_cli.py         # CLI tests, alongside other test modules
 ```
 
 ## Design decisions
 
-### Why open models, run locally?
+### A small model wrapper
 
-- **Free and private.** No API key, no per-token cost, nothing leaves the machine. Anyone can clone the repo and run it.
-- **Reproducible.** A pinned local model name in `.env` plus `uv.lock` makes runs repeatable.
-- **Honest about small models.** Local models are smaller, so they follow strict formats less reliably. That makes the weak points of an agent (parsing, error recovery) visible instead of hiding them behind a very strong model.
+The agent loop should not need provider-specific branching. A narrow wrapper separates orchestration from Ollama/Groq details and makes provider changes easier.
 
-I treat model choice as a setting, not as code:
+### Parsing separate from orchestration
 
-| Model | Why it is in the project |
-|---|---|
-| `phi4-mini` | Very small and fast; a baseline that shows how much format discipline a tiny model has. |
-| `qwen3:8b` | Main candidate: larger, instruction-following, about 5 GB on disk. |
-| `llama3.2` | Second comparison model. |
+The parser interprets model output; the loop decides what to do next. Keeping these responsibilities separate makes both easier to test.
 
-A comparison table (turns to answer, parse errors, success) will be added once the agent loop exists and I have real traces. Check each model's license on its Ollama page before reuse.
+### Tool errors become observations
 
-### Why one OpenAI-compatible client for Ollama?
+A tool-execution failure is returned to the model as an observation, allowing the agent to react to the failure instead of crashing on an ordinary tool error. This is a deliberate tool-execution boundary, not a claim that every possible application or provider error is swallowed.
 
-Ollama exposes an OpenAI-compatible endpoint (`/v1`). Using one standard client means the wrapper stays small, and the same code can talk to other servers with that API later. The rest of the project only calls `chat(messages, system, temperature, stop)`.
+### A bounded loop
 
-Two parameters matter for an agent:
+An iteration limit prevents unbounded agent execution. It does not guarantee that a task will be solved within the configured limit.
 
-- `temperature=0.0` keeps output as repeatable as possible, which helps a model stick to a strict format.
-- `stop=["Observation:"]` cuts generation before the model can invent a tool result itself.
+### Explicit components instead of a framework
 
-### Why build it from scratch?
+The loop, parser, prompt, tools, and model wrapper remain visible. This is useful for learning because the framework does not hide the control flow.
 
-To understand exactly what an agent framework does for you: prompting, parsing, the loop, tool calls, error handling. A later project can rebuild the same agent with a framework, so the comparison is concrete.
+## Testing
 
-### Why text-based ReAct instead of native tool calling?
+Run the test suite:
 
-- It works with any model that can follow instructions, including small local ones.
-- Every step is plain text, so a run can be read and debugged line by line.
-- It makes the parser and the prompt explicit parts of the design.
+```powershell
+uv run pytest -q
+```
 
-The trade-off: the model may break the format, so the parser must be defensive. Native tool calling or JSON-schema output is a possible alternative and a good comparison later.
+Run Ruff:
 
-### Why these tool designs?
+```powershell
+uv run ruff check .
+```
 
-- **Tools are plain `str -> str` functions.** The model writes text and receives text, so tools are trivial to test without any model.
-- **The calculator never uses `eval`.** `eval` can run arbitrary code. The calculator parses the expression into a syntax tree with `ast` and evaluates only whitelisted nodes (numbers, `+ - * / **`, unary signs). It also limits expression length and exponent size so inputs like `9**9**9` cannot freeze the program.
-- **The file reader is sandboxed.** Paths are resolved and must stay inside `data/`, which blocks `../` and absolute-path escapes. Output is truncated so one file cannot fill the model's context.
-- **Search is fake on purpose.** A small fixed knowledge base keeps the project offline and the tests deterministic. The interface does not change if it is replaced by a real search.
-- **Expected problems are returned as text, unexpected ones are raised.** A missing file becomes `Error: ...` the model can act on. Bad calculator input raises, and the agent loop will turn any tool exception into an observation instead of crashing.
+Latest results reported during development:
 
-### Why a prompt contract with the parser?
+- `79 passed`
+- `All checks passed!` from Ruff
 
-The format keywords (`Thought:`, `Action:`, `Action Input:`, `Observation:`, `Final Answer:`) are shared by the prompt and the parser. A test checks that the prompt still contains all of them, so the two files cannot silently drift apart.
-
-### Why tests without a model?
-
-Unit tests use fake clients and plain functions, so they run in milliseconds, cost nothing and are deterministic. The agent loop will take the model function as a parameter, so it can be tested with a scripted fake model: a three-step path, an unknown tool, malformed output, and the iteration limit.
-
-## Roadmap
-
-- [x] Model wrapper (`llm.py`)
-- [x] Tools with a safe calculator and a sandboxed file reader (`tools.py`)
-- [x] System prompt builder (`prompt.py`)
-- [ ] Output parser (`parser.py`)
-- [ ] Agent loop with an iteration limit (`loop.py`)
-- [ ] Real example trace and model comparison table
-- [ ] Optional: a `search_pdf` tool connected to my [rag-qa-system](https://github.com/sadrjahani/rag-qa-system)
+Re-run both commands after changes; results depend on the current code and environment.
 
 ## Limitations
 
-- Tool input is a single line.
-- The search tool uses a small fixed knowledge base.
-- Small local models may break the output format; recovery is handled by the parser and the loop (in progress).
-- One action per turn, no parallel tool calls.
+- The search tool uses a fixed demonstration dataset; it does not search the live web.
+- The agent can use only the tools implemented in this repository.
+- Model output is not deterministic; different providers or models may choose different actions or wording.
+- Model calls add latency. Even a simple arithmetic question may require a model decision, a tool call, and another model decision.
+- File lookup is intended for bounded project data, not unrestricted filesystem access. Verify path restrictions and output limits against the current tool implementation.
+- The project does not claim production-grade security, observability, persistence, concurrency, or resilience.
+
+For simple, predictable operations, a direct Python function is usually faster and simpler than an agent. The agent pattern is more useful when a task benefits from model-driven tool selection or handling less structured requests.
+
+## Possible next steps
+
+These are optional extensions, not existing features:
+
+- measure end-to-end latency and individual model-call duration before optimizing;
+- add structured logging/tracing for each reasoning, action, and observation step;
+- add more narrowly scoped tools with explicit input validation;
+- connect a retrieval tool to a RAG system for document-grounded research;
+- add streaming if live incremental output becomes a project goal.
+
+---
 
 ## License
 
-MIT
+Add the license and attribution information that applies to this repository. Do not imply that the project has an open-source license unless one has been selected and included.
