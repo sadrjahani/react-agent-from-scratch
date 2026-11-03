@@ -104,24 +104,24 @@ def search(query: str) -> str:
 
 
 def file_lookup(filename: str) -> str:
-    """Read a UTF-8 text file inside ``DATA_DIR``.
+    """Read a bounded amount of UTF-8 text from a file inside DATA_DIR.
 
-    The path is resolved first, so ``..`` and absolute paths cannot escape the
-    folder. Returns the first ``MAX_FILE_CHARS`` characters or an ``Error: ...``
-    message.
+    Returns at most MAX_FILE_CHARS characters or an "Error: ..." message.
     """
     base = DATA_DIR.resolve()
     path = (base / filename.strip()).resolve()
+
     if not path.is_relative_to(base):
         return "Error: access outside the data folder is not allowed."
+
     if not path.is_file():
         return f"Error: file '{filename}' not found in the data folder."
+
     try:
-        text = path.read_text(encoding="utf-8")
+        with path.open("r", encoding="utf-8") as file:
+            return file.read(MAX_FILE_CHARS)
     except UnicodeDecodeError:
         return f"Error: file '{filename}' is not a UTF-8 text file."
-    return text[:MAX_FILE_CHARS]
-
 
 # To add a tool, write a ``str -> str`` function and register it here.
 TOOLS: list[Tool] = [
