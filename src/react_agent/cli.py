@@ -3,13 +3,18 @@
 
 import argparse
 
+from react_agent.llm import chat
 from react_agent.loop import run_agent
 from react_agent.tools import TOOLS
 
 __all__ = ["main"]
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    llm=chat,
+) -> int:
     """Run the agent on one question and print every step.
 
     Returns:
@@ -29,7 +34,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    result = run_agent(args.question, TOOLS, max_iters=args.max_iters)
+    result = run_agent(
+        args.question,
+        TOOLS,
+        max_iters=args.max_iters,
+        llm=llm,
+    )
 
     for step in result["trace"]:
         print(f"--- step {step['step']} ---")
