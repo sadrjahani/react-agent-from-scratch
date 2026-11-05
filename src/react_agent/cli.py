@@ -41,9 +41,18 @@ def main(
         llm=llm,
     )
 
-    for step in result["trace"]:
+    for index, step in enumerate(result["trace"]):
         print(f"--- step {step['step']} ---")
-        print(step["model"])
+
+        is_final_step = result["finished"] and index == len(result["trace"]) - 1
+
+        if is_final_step:
+            model_output = step["model"].partition("Final Answer:")[0].rstrip()
+            if model_output:
+                print(model_output)
+        else:
+            print(step["model"])
+
         if "observation" in step:
             print(f"Observation: {step['observation']}")
 

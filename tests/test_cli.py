@@ -25,7 +25,7 @@ def test_cli_prints_answer_and_exits_zero(monkeypatch, capsys) -> None:
 
     out = capsys.readouterr().out
     assert exit_code == 0
-    assert "42" in out
+    assert out.count("Final Answer: 42") == 1
     assert calls["question"] == "What is 2+2?"
     assert calls["max_iters"] == 6
 
