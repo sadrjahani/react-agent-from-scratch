@@ -31,6 +31,17 @@ Final Answer: the answer to the original question
 
 Rules:
 - Write only ONE Action per reply, then stop and wait for the Observation.
+- The Action line must contain ONLY the tool name.
+- Put the tool arguments on the NEXT line, starting with "Action Input:".
+- Never put the tool arguments on the Action line.
+- When explaining a calculation, briefly verify the result using a mathematical
+  relationship directly related to the given expression. Do not include
+  unrelated mathematical rules, examples, or explanations.
+- Follow this exact format for every tool call:
+
+Action: calculator
+Action Input: 2 + 2
+
 - Never write the Observation yourself.
 - If you can answer without a tool, go straight to Thought and Final Answer.
 - If an Observation starts with "Error", read it, fix your Action or Action Input, and try again.
