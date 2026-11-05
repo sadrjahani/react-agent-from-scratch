@@ -1,6 +1,8 @@
 
 """ReAct agent loop: call the model, parse, run a tool, feed the Observation back."""
 
+from time import perf_counter
+
 from react_agent.llm import chat
 from react_agent.parser import parse
 from react_agent.prompt import build_system_prompt
@@ -44,10 +46,21 @@ def run_agent(question, tools, llm=chat, max_iters=6):
     trace = []
 
     for step in range(1, max_iters + 1):
+        llm_start = perf_counter()
+
         text = llm(messages, system=system, stop=["Observation:"])
+
+        llm_duration = perf_counter() - llm_start
+
         parsed = parse(text)
 
-        trace.append({"step": step, "model": text})
+        trace.append(
+            {
+                "step": step,
+                "model": text,
+                "llm_duration_seconds": llm_duration,
+            }
+        )
         messages.append({"role": "assistant", "content": text})
 
         if parsed["type"] == "final":

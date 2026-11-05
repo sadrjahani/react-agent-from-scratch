@@ -204,3 +204,21 @@ def test_tool_missing_required_attributes_is_rejected():
         run_agent("Test", [InvalidTool()], llm=llm)
 
     assert llm.calls == []
+
+
+def test_trace_records_llm_duration_for_each_call(monkeypatch):
+    from react_agent import loop
+
+    timestamps = iter([10.0, 12.5, 20.0, 23.0])
+    monkeypatch.setattr(loop, "perf_counter", lambda: next(timestamps))
+
+    llm = make_llm(
+        "Action: calculator\nAction Input: 2+3",
+        "Final Answer: 5",
+    )
+
+    result = run_agent("What is 2+3?", [make_tool()], llm=llm)
+
+    assert result["answer"] == "5"
+    assert result["trace"][0]["llm_duration_seconds"] == 2.5
+    assert result["trace"][1]["llm_duration_seconds"] == 3.0
