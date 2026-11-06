@@ -86,6 +86,18 @@ def test_file_lookup_blocks_absolute_paths(data_dir: Path) -> None:
     outside = data_dir.parent / "outside.txt"
     assert "outside" in file_lookup(str(outside))
 
+def test_file_lookup_blocks_symlink_outside_data_dir(data_dir: Path) -> None:
+    outside = data_dir.parent / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+
+    link = data_dir / "link.txt"
+
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not supported in this environment")
+
+    assert "outside" in file_lookup("link.txt")
 
 def test_file_lookup_reports_missing_file(data_dir: Path) -> None:
     assert "not found" in file_lookup("nope.txt")
